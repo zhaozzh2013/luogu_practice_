@@ -42,6 +42,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   ProblemSummary? _selectedProblem;
   AsyncSnapshot<LuoguProblemDetail?> _detailSnapshot = const AsyncSnapshot.nothing();
   Problem? _localDetail;
+  /// 是否在题单详情内选中了题目（用于控制 back 行为）
+  bool _inTrainingProblemView = false;
 
   // ── 训练进度追踪 ──
   /// 已做的题目（在当前训练中）
@@ -199,6 +201,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _selectedProblem = p;
       _localDetail = null;
       _activeTrainingProblemPid = fromTraining ? p.pid : null;
+      _inTrainingProblemView = fromTraining;
       if (!fromTraining) _selectedTraining = null;
     });
     if (_hasNetProbs) _fetchDetail(p.pid); else _showLocalDetail(p.pid);
@@ -614,7 +617,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildContent() {
-    // 有训练选中时：优先显示训练题目列表（即使右侧在显示题目内容）
+    // 在题单内选中了题目：显示题单题目列表（可切其他题）
+    if (_inTrainingProblemView && _selectedTraining != null) return _buildTrainingProblemList();
+    // 有训练选中（但未在查看题目）：显示该训练的题目列表
     if (_selectedTraining != null) return _buildTrainingProblemList();
     switch (_navIndex) {
       case 0: return _buildAppPage();
@@ -1008,9 +1013,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         onAiAssist: () => _handleAiAssist(detail.pid, detail.name, detail.description),
         onCodeCheck: _handleCodeCheck,
         onBack: () => setState(() {
-          _selectedProblem = null;
-          _detailSnapshot = const AsyncSnapshot.nothing();
-          _localDetail = null;
+          if (_inTrainingProblemView) {
+            // 第一级返回：只清除题目，回到题单题目列表
+            _selectedProblem = null;
+            _detailSnapshot = const AsyncSnapshot.nothing();
+            _localDetail = null;
+            _inTrainingProblemView = false;
+          } else if (_selectedTraining != null) {
+            // 第二级返回：清除题单，回到题单列表
+            _selectedTraining = null;
+            _solvedInTraining.clear();
+            _activeTrainingProblemPid = null;
+          } else {
+            // 普通情况：清除题目
+            _selectedProblem = null;
+            _detailSnapshot = const AsyncSnapshot.nothing();
+            _localDetail = null;
+          }
         }),
         onLangChanged: () => setState(() {}),
       );
@@ -1031,9 +1050,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       onAiAssist: () => _handleAiAssist(local.id, local.title, local.description),
       onCodeCheck: _handleCodeCheck,
       onBack: () => setState(() {
-        _selectedProblem = null;
-        _detailSnapshot = const AsyncSnapshot.nothing();
-        _localDetail = null;
+        if (_inTrainingProblemView) {
+          _selectedProblem = null;
+          _detailSnapshot = const AsyncSnapshot.nothing();
+          _localDetail = null;
+          _inTrainingProblemView = false;
+        } else if (_selectedTraining != null) {
+          _selectedTraining = null;
+          _solvedInTraining.clear();
+          _activeTrainingProblemPid = null;
+        } else {
+          _selectedProblem = null;
+          _detailSnapshot = const AsyncSnapshot.nothing();
+          _localDetail = null;
+        }
       }),
       onLangChanged: () => setState(() {}),
     );
