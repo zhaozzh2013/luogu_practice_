@@ -302,8 +302,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
     final problemText = '$description\n\n输入格式：$inputFormat\n\n输出格式：$outputFormat';
 
-    // 读取本地代码
-    final code = await _solutionManager.readCode(pid);
+    // 读取本地代码，自动检测语言
+    final (code, detectedLang) = await _solutionManager.readCodeWithLang(pid);
+    // 用户独立设置 > 检测到的语言 > 全局默认
+    final lang = CodeCheckerService.perProblemLanguage[pid] ?? detectedLang;
 
     // 读取当前选择的 provider（默认 deepseek）
     final provider = _selectedCheckProvider;
@@ -345,7 +347,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     final result = await CodeCheckerService.check(
       pid: pid,
       code: code,
-      lang: 'cpp',
+      lang: lang,
       provider: provider,
       problemDesc: problemText,
       samples: samples,
@@ -1005,6 +1007,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         },
         onAiAssist: () => _handleAiAssist(detail.pid, detail.name, detail.description),
         onCodeCheck: _handleCodeCheck,
+        onBack: () => setState(() {
+          _selectedProblem = null;
+          _detailSnapshot = const AsyncSnapshot.nothing();
+          _localDetail = null;
+        }),
+        onLangChanged: () => setState(() {}),
       );
     }
     final local = _localDetail ?? sampleProblems.firstWhere((s) => s.id == _selectedProblem!.pid, orElse: () => sampleProblems.first);
@@ -1022,6 +1030,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       },
       onAiAssist: () => _handleAiAssist(local.id, local.title, local.description),
       onCodeCheck: _handleCodeCheck,
+      onBack: () => setState(() {
+        _selectedProblem = null;
+        _detailSnapshot = const AsyncSnapshot.nothing();
+        _localDetail = null;
+      }),
+      onLangChanged: () => setState(() {}),
     );
   }
 
@@ -1748,6 +1762,86 @@ class _StatPill extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════
+// 做题偏好语言设置行
+// ═══════════════════════════════════════
+class _LanguageSettingRow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final lang = CodeCheckerService.defaultLanguage;
+    final label = lang == 'py' ? 'Python' : 'C++';
+    return GestureDetector(
+      onTap: () => _showLanguageDialog(context),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(children: [
+          Icon(Icons.code, size: 18, color: AppTheme.accent),
+          const SizedBox(width: 12),
+          const Text('做题偏好语言', style: TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: AppTheme.accent.withAlpha(25), borderRadius: BorderRadius.circular(6)),
+            child: Text(label, style: TextStyle(color: AppTheme.accent, fontSize: 11, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right, size: 16, color: AppTheme.textMuted),
+        ]),
+      ),
+    );
+  }
+
+  void _showLanguageDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('选择做题语言', style: TextStyle(color: AppTheme.textPrimary)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          _LangOption('cpp', 'C++', CodeCheckerService.defaultLanguage == 'cpp'),
+          const SizedBox(height: 8),
+          _LangOption('py', 'Python', CodeCheckerService.defaultLanguage == 'py'),
+        ]),
+      ),
+    );
+  }
+}
+
+class _LangOption extends StatelessWidget {
+  final String lang;
+  final String label;
+  final bool selected;
+  const _LangOption(this.lang, this.label, this.selected);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        CodeCheckerService.setDefaultLanguage(lang);
+        Navigator.pop(context);
+        // 关闭设置弹窗让它刷新
+        Navigator.pop(context);
+        // 重新打开设置
+        showDialog(context: context, builder: (_) => const _SettingsDialog());
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.accent.withAlpha(20) : AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: selected ? AppTheme.accent : AppTheme.border),
+        ),
+        child: Row(children: [
+          Text(label, style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+          const Spacer(),
+          if (selected) Icon(Icons.check, color: AppTheme.accent, size: 18),
+        ]),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════
 // 设置弹窗
 // ═══════════════════════════════════════
 class _SettingsDialog extends StatelessWidget {
@@ -1778,6 +1872,7 @@ class _SettingsDialog extends StatelessWidget {
           _SettingsRow(icon: Icons.code, label: 'VSCode 路径', value: '自动检测'),
           _SettingsRow(icon: Icons.folder, label: '题目保存位置', value: '~/Documents/luogu-solutions'),
           _SettingsRow(icon: Icons.language, label: '洛谷服务器', value: 'https://www.luogu.com.cn'),
+          _LanguageSettingRow(),
           GestureDetector(
             onTap: () {
               Navigator.pop(context);
@@ -1908,6 +2003,19 @@ class _CodeCheckResultDialog extends StatelessWidget {
               IconButton(icon: const Icon(Icons.close, color: AppTheme.textMuted), onPressed: () => Navigator.pop(context)),
             ]),
           ),
+          // 情绪价值
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: _getEncouragementBg(result.score),
+              border: Border(bottom: BorderSide(color: AppTheme.border)),
+            ),
+            child: Text(
+              _getEncouragement(result.score, result.correct),
+              style: TextStyle(color: _getEncouragementColor(result.score), fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
+            ),
+          ),
           // 内容
           Flexible(child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -2007,6 +2115,27 @@ class _CodeCheckResultDialog extends StatelessWidget {
         ]),
       ),
     );
+  }
+
+  static String _getEncouragement(int score, bool correct) {
+    if (correct || score >= 95) return '🎉 完美！太强了，这道题完全难不住你！';
+    if (score >= 85) return '👍 很不错！思路清晰，稍微优化一下就能 AC！';
+    if (score >= 70) return '💪 思路对了！边界情况再想想，一定能行！';
+    if (score >= 50) return '🤔 已经在正确的路上了，再坚持一下！';
+    if (score >= 30) return '🔥 别灰心！每行代码都是进步，继续加油！';
+    return '💡 没关系，错误是学习最好的老师，再试一次！';
+  }
+
+  static Color _getEncouragementBg(int score) {
+    if (score >= 85) return AppTheme.green.withAlpha(15);
+    if (score >= 50) return AppTheme.orange.withAlpha(15);
+    return AppTheme.red.withAlpha(15);
+  }
+
+  static Color _getEncouragementColor(int score) {
+    if (score >= 85) return AppTheme.green;
+    if (score >= 50) return AppTheme.orange;
+    return AppTheme.red;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../theme/app_theme.dart';
 import '../models/problem.dart';
 import '../widgets/problem_widgets.dart';
+import '../services/code_checker_service.dart';
 
 /// 问题详情页 - 右侧主内容区
 class ProblemDetailPage extends StatefulWidget {
@@ -24,6 +25,8 @@ class ProblemDetailPage extends StatefulWidget {
   final VoidCallback? onOpenInVscode;
   final VoidCallback? onAiAssist;
   final VoidCallback? onCodeCheck;
+  final VoidCallback? onBack;
+  final VoidCallback? onLangChanged;
 
   const ProblemDetailPage({
     super.key,
@@ -45,6 +48,8 @@ class ProblemDetailPage extends StatefulWidget {
     this.onOpenInVscode,
     this.onAiAssist,
     this.onCodeCheck,
+    this.onBack,
+    this.onLangChanged,
   });
 
   @override
@@ -65,6 +70,14 @@ class _ProblemDetailPageState extends State<ProblemDetailPage> {
     return AppBar(
       backgroundColor: AppTheme.surface,
       surfaceTintColor: Colors.transparent,
+      leading: widget.onBack != null
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary, size: 20),
+              onPressed: widget.onBack,
+              tooltip: '返回题单',
+            )
+          : null,
+      leadingWidth: widget.onBack != null ? 40 : null,
       titleSpacing: 0,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,6 +124,8 @@ class _ProblemDetailPageState extends State<ProblemDetailPage> {
               icon: Icons.auto_awesome, label: 'AI 辅助',
               color: AppTheme.accent, onTap: widget.onAiAssist ?? () {},
             ),
+            const SizedBox(width: 8),
+            _LangSelector(pid: widget.pid, onLangChanged: widget.onLangChanged ?? () {}),
             const SizedBox(width: 8),
             if (widget.onCodeCheck != null) ...[
               _ActionButton(
@@ -384,6 +399,64 @@ class _IoPanel extends StatelessWidget {
           child: Text(code, style: TextStyle(color: color, fontSize: 13, fontFamily: 'monospace', height: 1.5)),
         ),
       ]),
+    );
+  }
+}
+
+class _LangSelector extends StatelessWidget {
+  final String pid;
+  final VoidCallback onLangChanged;
+  const _LangSelector({required this.pid, required this.onLangChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final lang = CodeCheckerService.getLang(pid);
+    final isPy = lang == 'py';
+    return PopupMenuButton<String>(
+      tooltip: '切换语言',
+      offset: const Offset(0, 36),
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.primary.withAlpha(25),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.code, size: 14, color: AppTheme.primary),
+          const SizedBox(width: 4),
+          Text(isPy ? 'Python' : 'C++', style: TextStyle(color: AppTheme.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 2),
+          Icon(Icons.arrow_drop_down, size: 14, color: AppTheme.primary),
+        ]),
+      ),
+      onSelected: (value) {
+        CodeCheckerService.setProblemLanguage(pid, value);
+        onLangChanged();
+      },
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: 'cpp',
+          height: 36,
+          child: Row(children: [
+            Icon(Icons.code, size: 14, color: !isPy ? AppTheme.green : AppTheme.textMuted),
+            const SizedBox(width: 8),
+            Text('C++', style: TextStyle(color: !isPy ? AppTheme.green : AppTheme.textSecondary, fontSize: 13)),
+            if (!isPy) ...[const Spacer(), Icon(Icons.check, size: 14, color: AppTheme.green)],
+          ]),
+        ),
+        PopupMenuItem(
+          value: 'py',
+          height: 36,
+          child: Row(children: [
+            Icon(Icons.code, size: 14, color: isPy ? AppTheme.green : AppTheme.textMuted),
+            const SizedBox(width: 8),
+            Text('Python', style: TextStyle(color: isPy ? AppTheme.green : AppTheme.textSecondary, fontSize: 13)),
+            if (isPy) ...[const Spacer(), Icon(Icons.check, size: 14, color: AppTheme.green)],
+          ]),
+        ),
+      ],
     );
   }
 }

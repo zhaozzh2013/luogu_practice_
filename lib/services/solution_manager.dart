@@ -81,13 +81,23 @@ class SolutionManager {
     return await Directory(problemDir(problemId)).exists();
   }
 
-  /// 读取当前的代码内容
-  Future<String> readCode(String problemId) async {
-    final file = File(cppFilePath(problemId));
-    if (await file.exists()) {
-      return await file.readAsString();
+  /// 读取当前的代码内容，自动检测语言
+  /// 返回 (code, lang)，lang 为 'cpp' 或 'py'
+  Future<(String, String)> readCodeWithLang(String problemId) async {
+    final cppFile = File(cppFilePath(problemId));
+    if (await cppFile.exists()) {
+      return (await cppFile.readAsString(), 'cpp');
     }
-    return '';
+    final pyFile = File(pyFilePath(problemId));
+    if (await pyFile.exists()) {
+      return (await pyFile.readAsString(), 'py');
+    }
+    return ('', 'cpp');
+  }
+
+  /// 兼容旧接口
+  Future<String> readCode(String problemId) async {
+    return (await readCodeWithLang(problemId)).$1;
   }
 
   // ── 辅助 ──

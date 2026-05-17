@@ -95,6 +95,29 @@ class CodeCheckerService {
     if (baseUrl != null) cfg.baseUrl = baseUrl;
   }
 
+  /// 全局默认语言：cpp / py
+  static String defaultLanguage = 'py';
+
+  /// 每题独立语言设置，pid -> lang
+  static final Map<String, String> perProblemLanguage = {};
+
+  /// 获取某题的语言（优先独立设置，否则默认）
+  static String getLang(String pid) => perProblemLanguage[pid] ?? defaultLanguage;
+
+  /// 设置全局默认语言
+  static void setDefaultLanguage(String lang) {
+    if (lang == 'cpp' || lang == 'py') defaultLanguage = lang;
+  }
+
+  /// 设置某题的独立语言（null = 清除独立设置）
+  static void setProblemLanguage(String pid, String? lang) {
+    if (lang == null) {
+      perProblemLanguage.remove(pid);
+    } else if (lang == 'cpp' || lang == 'py') {
+      perProblemLanguage[pid] = lang;
+    }
+  }
+
   /// 检测代码
   /// [pid] 题号
   /// [code] 用户代码
